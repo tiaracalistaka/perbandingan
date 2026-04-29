@@ -7,12 +7,30 @@ type DataDI = {
 
 type ApiResponse = {
   wrdc: {
-    data: DataDI[]
-    pagination: {
+    data?: DataDI[]
+    pagination?: {
       page: number
       limit: number
       total: number
       totalPages: number
+    }
+    permukaan?: {
+      data: DataDI[]
+      pagination: {
+        page: number
+        limit: number
+        total: number
+        totalPages: number
+      }
+    }
+    rawa?: {
+      data: DataDI[]
+      pagination: {
+        page: number
+        limit: number
+        total: number
+        totalPages: number
+      }
     }
   }
   epaksi: {
@@ -43,8 +61,26 @@ const { data, pending, refresh } = await useFetch<ApiResponse>('/api/compare', {
   }
 })
 
-const wrdcData = computed<DataDI[]>(() => data.value?.wrdc?.data || [])
-const wrdcPagination = computed(() => data.value?.wrdc?.pagination)
+const wrdcData = computed<DataDI[]>(() => {
+  const merged = data.value?.wrdc?.data
+
+  if (Array.isArray(merged)) return merged
+
+  const permukaan = data.value?.wrdc?.permukaan?.data || []
+  const rawa = data.value?.wrdc?.rawa?.data || []
+
+  return [...permukaan, ...rawa]
+})
+
+const wrdcPagination = computed(() => {
+  const pagination = data.value?.wrdc?.pagination
+  if (pagination) return pagination
+
+  const permukaan = data.value?.wrdc?.permukaan?.pagination
+  if (permukaan) return permukaan
+
+  return data.value?.wrdc?.rawa?.pagination
+})
 
 const epaksiData = computed<DataDI[]>(() => data.value?.epaksi?.data || [])
 const epaksiPagination = computed(() => data.value?.epaksi?.pagination)
@@ -161,10 +197,9 @@ const columns = [
         <template #footer v-if="wrdcPagination">
           <div class="flex justify-center mt-4">
             <UPagination
-              :model-value="wrdcPage"
-              :page-count="wrdcLimit"
+              v-model:page="wrdcPage"
+              :items-per-page="wrdcLimit"
               :total="wrdcPagination.total"
-              @update:model-value="updateWrdcPage"
             />
           </div>
         </template>
@@ -192,10 +227,9 @@ const columns = [
         <template #footer v-if="epaksiPagination">
           <div class="flex justify-center mt-4">
             <UPagination
-              :model-value="epaksiPage"
-              :page-count="epaksiLimit"
+              v-model:page="epaksiPage"
+              :items-per-page="epaksiLimit"
               :total="epaksiPagination.total"
-              @update:model-value="updateEpaksiPage"
             />
           </div>
         </template>

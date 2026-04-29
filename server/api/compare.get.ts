@@ -30,49 +30,73 @@ export default defineEventHandler(async (event) => {
   const wrdcLimit = Math.min(100, parseInt(query.wrdcLimit as string) || 20)
   const epaksiPage = Math.max(1, parseInt(query.epaksiPage as string) || 1)
   const epaksiLimit = Math.min(100, parseInt(query.epaksiLimit as string) || 20)
-
   const wrdcOffset = (wrdcPage - 1) * wrdcLimit
   const epaksiOffset = (epaksiPage - 1) * epaksiLimit
 
+  const fetchAllWrdcRecords = async (jenisDaerahIrigasiId: number) => {
+    const pageSize = 500
+    let offset = 1
+    let total = 0
+    const records: any[] = []
+
+    while (true) {
+      const response: any = await $fetch(
+        `https://pdsda.sda.pu.go.id/api/daerah_irigasi?offset=${offset}&jenis_kewenangan_id=1&jenis_daerah_irigasi_id=${jenisDaerahIrigasiId}&take=${pageSize}`,
+        {
+          headers: {
+            'User': `${config.WRDC_USER}`,
+            'Token': `${config.WRDC_TOKEN}`,
+            'User-Agent': 'Mozilla/5.0'
+          }
+        }
+      )
+
+      const pageRecords = response?.data?.records || []
+      total = total || readTotal(response)
+      records.push(...pageRecords)
+
+      if (!pageRecords.length) break
+      if (total && records.length >= total) break
+
+      offset += pageSize
+    }
+
+    return records
+  }
+
+  const mapWrdcRecord = (d: any) => ({
+    nama: d.nama_daerah_irigasi?.trim(),
+    luas: Number(d.total_luas_hektar),
+    pengelola: d.data_daerah_irigasi?.[0]?.pengelola || d.pengelola || ''
+  })
+
+  const getJenisDaerahIrigasi = (d: any) =>
+    d?.data_daerah_irigasi?.[0]?.jenis_daerah_irigasi ||
+    d?.jenis_daerah_irigasi ||
+    ''
+
   try {
     // =============================
-    // 🔹 WRDC API (dengan pagination)
+    // 🔹 WRDC API (gabung permukaan + rawa, lalu paginasi)
     // =============================
-    const permukaan: any = await $fetch(
-      `https://pdsda.sda.pu.go.id/api/daerah_irigasi?offset=${wrdcOffset + 1}&jenis_kewenangan_id=1&jenis_daerah_irigasi_id=1&take=${wrdcLimit}`,
-      {
-        headers: {
-          'User': `${config.WRDC_USER}`,
-          'Token': `${config.WRDC_TOKEN}`,
-          'User-Agent': 'Mozilla/5.0'
-        }
-      }
-    )
+    const permukaanRecords = await fetchAllWrdcRecords(1)
+    const rawaRecords = await fetchAllWrdcRecords(3)
 
-    const rawa: any = await $fetch(
-      `https://pdsda.sda.pu.go.id/api/daerah_irigasi?offset=${wrdcOffset + 1}&jenis_kewenangan_id=1&jenis_daerah_irigasi_id=3&take=${wrdcLimit}`,
-      {
-        headers: {
-          'User': `${config.WRDC_USER}`,
-          'Token': `${config.WRDC_TOKEN}`,
-          'User-Agent': 'Mozilla/5.0'
-        }
-      }
-    )
+    const permukaanData = permukaanRecords
+      .filter((d: any) => getJenisDaerahIrigasi(d) === 'Irigasi Permukaan')
+      .map(mapWrdcRecord)
 
-    const permukaanArray = permukaan?.data?.records || []
-    const rawaArray = rawa?.data?.records || []
+    const rawaData = rawaRecords
+      .filter((d: any) => getJenisDaerahIrigasi(d) === 'Irigasi Rawa')
+      .map(mapWrdcRecord)
 
-    const wrdcRaw = [...permukaanArray, ...rawaArray]
-    const wrdcTotal = readTotal(permukaan) + readTotal(rawa) || wrdcRaw.length
+    const wrdcAll = [...permukaanData, ...rawaData]
+    const wrdcTotal = wrdcAll.length
+    const wrdc = wrdcAll.slice(wrdcOffset, wrdcOffset + wrdcLimit)
 
-    const wrdc = wrdcRaw.map((d: any) => ({
-      nama: d.nama_daerah_irigasi?.trim(),
-      luas: Number(d.total_luas_hektar),
-      pengelola: d.data_daerah_irigasi?.[0]?.pengelola || d.pengelola || ''
-    }))
-
-    console.log(`✅ WRDC: ${wrdc.length} / Total: ${wrdcTotal}`)
+    console.log(`✅ WRDC Permukaan: ${permukaanData.length}`)
+    console.log(`✅ WRDC Rawa: ${rawaData.length}`)
+    console.log(`✅ WRDC Combined: ${wrdc.length} / Total: ${wrdcTotal}`)
 
     // =============================
     // 🔹 PostgreSQL (pakai DB_URL, dengan pagination)
