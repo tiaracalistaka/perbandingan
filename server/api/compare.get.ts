@@ -8,7 +8,8 @@ const config = useRuntimeConfig()
   // =============================
   const permukaan: any  = await $fetch('https://pdsda.sda.pu.go.id/api/daerah_irigasi?offset=1&jenis_kewenangan_id=1&jenis_daerah_irigasi_id=1&take=320', {
   headers: {
-    'Authorization': `Bearer ${config.WRDC_TOKEN}`,
+    'User': config.WRDC_USER,
+    'Token': config.WRDC_TOKEN,
     'User-Agent': 'Mozilla/5.0'
   }
 })
@@ -17,7 +18,8 @@ const config = useRuntimeConfig()
     'https://pdsda.sda.pu.go.id/api/daerah_irigasi?offset=1&jenis_kewenangan_id=1&jenis_daerah_irigasi_id=3&take=120',
     {
       headers: {
-        'Authorization': `Bearer ${config.WRDC_TOKEN}`,
+        'User': config.WRDC_USER,
+        'Token': config.WRDC_TOKEN,
         'User-Agent': 'Mozilla/5.0'
       }
     }
