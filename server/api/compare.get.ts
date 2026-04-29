@@ -5,6 +5,26 @@ export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig()
   const query = getQuery(event)
 
+  const readTotal = (response: any) => {
+    const candidates = [
+      response?.data?.total,
+      response?.data?.total_data,
+      response?.data?.totalRecords,
+      response?.data?.total_records,
+      response?.total,
+      response?.total_data,
+      response?.totalRecords,
+      response?.total_records
+    ]
+
+    for (const value of candidates) {
+      const total = Number(value)
+      if (!Number.isNaN(total) && total > 0) return total
+    }
+
+    return 0
+  }
+
   // Query parameters untuk pagination
   const wrdcPage = Math.max(1, parseInt(query.wrdcPage as string) || 1)
   const wrdcLimit = Math.min(100, parseInt(query.wrdcLimit as string) || 20)
@@ -44,7 +64,7 @@ export default defineEventHandler(async (event) => {
     const rawaArray = rawa?.data?.records || []
 
     const wrdcRaw = [...permukaanArray, ...rawaArray]
-    const wrdcTotal = permukaan?.data?.total || 0
+    const wrdcTotal = readTotal(permukaan) + readTotal(rawa) || wrdcRaw.length
 
     const wrdc = wrdcRaw.map((d: any) => ({
       nama: d.nama_daerah_irigasi?.trim(),
