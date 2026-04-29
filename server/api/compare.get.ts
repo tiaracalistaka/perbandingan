@@ -1,15 +1,25 @@
 import pkg from 'pg'
 const { Client } = pkg
 
-export default defineEventHandler(async () => {
+export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig()
+  const query = getQuery(event)
+
+  // Query parameters untuk pagination
+  const wrdcPage = Math.max(1, parseInt(query.wrdcPage as string) || 1)
+  const wrdcLimit = Math.min(100, parseInt(query.wrdcLimit as string) || 20)
+  const epaksiPage = Math.max(1, parseInt(query.epaksiPage as string) || 1)
+  const epaksiLimit = Math.min(100, parseInt(query.epaksiLimit as string) || 20)
+
+  const wrdcOffset = (wrdcPage - 1) * wrdcLimit
+  const epaksiOffset = (epaksiPage - 1) * epaksiLimit
 
   try {
     // =============================
-    // 🔹 WRDC API
+    // 🔹 WRDC API (dengan pagination)
     // =============================
     const permukaan: any = await $fetch(
-      'https://pdsda.sda.pu.go.id/api/daerah_irigasi?offset=1&jenis_kewenangan_id=1&jenis_daerah_irigasi_id=1&take=320',
+      `https://pdsda.sda.pu.go.id/api/daerah_irigasi?offset=${wrdcOffset + 1}&jenis_kewenangan_id=1&jenis_daerah_irigasi_id=1&take=${wrdcLimit}`,
       {
         headers: {
           'User': `${config.WRDC_USER}`,
@@ -20,7 +30,7 @@ export default defineEventHandler(async () => {
     )
 
     const rawa: any = await $fetch(
-      'https://pdsda.sda.pu.go.id/api/daerah_irigasi?offset=1&jenis_kewenangan_id=1&jenis_daerah_irigasi_id=3&take=120',
+      `https://pdsda.sda.pu.go.id/api/daerah_irigasi?offset=${wrdcOffset + 1}&jenis_kewenangan_id=1&jenis_daerah_irigasi_id=3&take=${wrdcLimit}`,
       {
         headers: {
           'User': `${config.WRDC_USER}`,
@@ -34,17 +44,18 @@ export default defineEventHandler(async () => {
     const rawaArray = rawa?.data?.records || []
 
     const wrdcRaw = [...permukaanArray, ...rawaArray]
+    const wrdcTotal = permukaan?.data?.total || 0
 
     const wrdc = wrdcRaw.map((d: any) => ({
       nama: d.nama_daerah_irigasi?.trim(),
       luas: Number(d.total_luas_hektar),
-      pengelola: d.kewenangan
+      pengelola: d.data_daerah_irigasi?.[0]?.pengelola || d.pengelola || ''
     }))
 
-    console.log(`✅ WRDC: ${wrdc.length}`)
+    console.log(`✅ WRDC: ${wrdc.length} / Total: ${wrdcTotal}`)
 
     // =============================
-    // 🔹 PostgreSQL (pakai DB_URL)
+    // 🔹 PostgreSQL (pakai DB_URL, dengan pagination)
     // =============================
 
     const client = new Client({
@@ -54,6 +65,18 @@ export default defineEventHandler(async () => {
 
     await client.connect()
 
+    // Hitung total data
+    const countResult = await client.query(`
+      SELECT COUNT(*) as total
+      FROM irigasi i
+      LEFT JOIN tab_kabupaten k 
+        ON i.id_kabupaten = k.id_kabupaten
+      WHERE k.n_kabupaten LIKE 'BALAI%'
+    `)
+
+    const epaksiTotal = parseInt(countResult.rows[0]?.total || 0)
+
+    // Query dengan LIMIT dan OFFSET
     const result = await client.query(`
       SELECT 
         i.n_di,
@@ -63,7 +86,8 @@ export default defineEventHandler(async () => {
       LEFT JOIN tab_kabupaten k 
         ON i.id_kabupaten = k.id_kabupaten
       WHERE k.n_kabupaten LIKE 'BALAI%'
-    `)
+      LIMIT $1 OFFSET $2
+    `, [epaksiLimit, epaksiOffset])
 
     const epaksi = result.rows.map((r: any) => ({
       nama: r.n_di?.trim(),
@@ -71,13 +95,29 @@ export default defineEventHandler(async () => {
       pengelola: r.n_kabupaten
     }))
 
-    console.log(`✅ ePAKSI: ${epaksi.length}`)
+    console.log(`✅ ePAKSI: ${epaksi.length} / Total: ${epaksiTotal}`)
 
     await client.end()
 
     return {
-      wrdc,
-      epaksi
+      wrdc: {
+        data: wrdc,
+        pagination: {
+          page: wrdcPage,
+          limit: wrdcLimit,
+          total: wrdcTotal,
+          totalPages: Math.ceil(wrdcTotal / wrdcLimit)
+        }
+      },
+      epaksi: {
+        data: epaksi,
+        pagination: {
+          page: epaksiPage,
+          limit: epaksiLimit,
+          total: epaksiTotal,
+          totalPages: Math.ceil(epaksiTotal / epaksiLimit)
+        }
+      }
     }
 
   } catch (error: any) {
