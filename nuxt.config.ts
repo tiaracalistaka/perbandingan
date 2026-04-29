@@ -5,6 +5,7 @@ export default defineNuxtConfig({
     WRDC_USER: process.env.WRDC_USER,
     WRDC_TOKEN: process.env.WRDC_TOKEN
   },
+  modules: ['@nuxt/ui'],
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true }
 })

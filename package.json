@@ -10,9 +10,15 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
+    "@nuxt/ui": "^4.7.1",
     "mysql2": "^3.22.3",
     "nuxt": "^4.4.2",
+    "pg": "^8.20.0",
     "vue": "^3.5.33",
     "vue-router": "^5.0.6"
+  },
+  "devDependencies": {
+    "@iconify-json/lucide": "^1.2.104",
+    "@types/pg": "^8.20.0"
   }
 }

@@ -1,111 +1,173 @@
-<script setup>
-const { data } = await useFetch('/api/compare')
+<script setup lang="ts">
+type DataDI = {
+  nama: string
+  luas: number
+  pengelola: string
+}
 
-const wrdcPage = ref(1)
-const epaksiPage = ref(1)
+const { data, pending } = await useFetch<{
+  wrdc: DataDI[]
+  epaksi: DataDI[]
+}>('/api/compare')
+
+const page = ref(1)
 const perPage = 10
 
-const wrdcPaginated = computed(() => {
-  const start = (wrdcPage.value - 1) * perPage
-  return data.value?.wrdc.slice(start, start + perPage) || []
+const wrdc = computed<DataDI[]>(() => data.value?.wrdc || [])
+const epaksi = computed<DataDI[]>(() => data.value?.epaksi || [])
+
+const paginated = computed(() => {
+  const start = (page.value - 1) * perPage
+  return wrdc.value.slice(start, start + perPage)
 })
 
-const epaksiPaginated = computed(() => {
-  const start = (epaksiPage.value - 1) * perPage
-  return data.value?.epaksi.slice(start, start + perPage) || []
-})
-
-// 🔥 fungsi compare warna
-function getStatus(w) {
-  const match = data.value?.epaksi.find(
-    e => e.nama?.toLowerCase() === w.nama?.toLowerCase()
-  )
-
-  if (!match) return 'missing'
-
-  if (w.luas !== match.luas || w.pengelola !== match.pengelola) {
-    return 'different'
-  }
-
-  return 'same'
+function findMatch(nama: string) {
+  return epaksi.value.find(e => e.nama === nama)
 }
+
+function getStatus(w: DataDI) {
+  const match = findMatch(w.nama)
+
+  if (!match) return 'red'
+
+  if (
+    match.luas === w.luas &&
+    match.pengelola === w.pengelola
+  ) return 'green'
+
+  return 'yellow'
+}
+
+// modal
+const isOpen = ref(false)
+const selected = ref<{ wrdc: DataDI; epaksi?: DataDI } | null>(null)
+
+function openDetail(w: DataDI) {
+  selected.value = {
+    wrdc: w,
+    epaksi: findMatch(w.nama)
+  }
+  isOpen.value = true
+}
+
+// ✅ columns FIX
+const columns = [
+  { accessorKey: 'nama', header: 'Nama DI' },
+  { accessorKey: 'luas', header: 'Luas' },
+  { accessorKey: 'pengelola', header: 'Pengelola' },
+  { id: 'action', header: '' }
+]
 </script>
 
 <template>
-  <div class="p-6 bg-gray-50 min-h-screen">
-    <h1 class="text-2xl font-bold mb-6">Compare WRDC vs ePAKSI</h1>
+  <UContainer class="py-8">
+    <!-- HEADER -->
+    <div class="mb-6">
+      <h1 class="text-2xl font-bold">Compare WRDC vs ePAKSI</h1>
+      <p class="text-gray-500 text-sm">
+        Highlight perbedaan data daerah irigasi
+      </p>
+    </div>
 
-    <div class="grid grid-cols-2 gap-6">
+    <div v-if="pending" class="text-center py-10">
+      <ULoader size="lg" />
+    </div>
 
-      <!-- ================= WRDC ================= -->
-      <div class="bg-white shadow rounded-xl p-4">
-        <h2 class="font-semibold mb-3">WRDC</h2>
+    <div v-else class="grid grid-cols-2 gap-6">
+      <!-- WRDC -->
+      <UCard>
+        <template #header>
+          <div class="flex justify-between items-center">
+            <span class="font-semibold">WRDC</span>
+            <UBadge color="blue">{{ wrdc.length }}</UBadge>
+          </div>
+        </template>
 
-        <table class="w-full text-sm">
-          <thead class="bg-gray-100">
-            <tr>
-              <th class="p-2 text-left">Nama DI</th>
-              <th class="p-2">Luas</th>
-              <th class="p-2">Pengelola</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            <tr v-for="w in wrdcPaginated" :key="w.nama"
+        <UTable :data="paginated" :columns="columns">
+          <!-- warna status -->
+          <template #nama-cell="{ row }">
+            <div
+              class="px-2 py-1 rounded text-sm font-medium"
               :class="{
-                'bg-green-100': getStatus(w)==='same',
-                'bg-yellow-100': getStatus(w)==='different',
-                'bg-red-100': getStatus(w)==='missing'
+                'bg-green-100 text-green-700': getStatus(row.original) === 'green',
+                'bg-yellow-100 text-yellow-700': getStatus(row.original) === 'yellow',
+                'bg-red-100 text-red-700': getStatus(row.original) === 'red'
               }"
             >
-              <td class="p-2">{{ w.nama }}</td>
-              <td class="p-2 text-center">{{ w.luas }}</td>
-              <td class="p-2 text-center">{{ w.pengelola }}</td>
-            </tr>
-          </tbody>
-        </table>
+              {{ row.original.nama }}
+            </div>
+          </template>
 
-        <div class="flex justify-between mt-3">
-          <button @click="wrdcPage--" :disabled="wrdcPage===1">Prev</button>
-          <button @click="wrdcPage++">Next</button>
-        </div>
-      </div>
+          <!-- tombol -->
+          <template #action-cell="{ row }">
+            <UButton size="xs" color="gray" @click="openDetail(row.original)">
+              Detail
+            </UButton>
+          </template>
+        </UTable>
+      </UCard>
 
-      <!-- ================= ePAKSI ================= -->
-      <div class="bg-white shadow rounded-xl p-4">
-        <h2 class="font-semibold mb-3">ePAKSI</h2>
+      <!-- EPAKSI -->
+      <UCard>
+        <template #header>
+          <div class="flex justify-between items-center">
+            <span class="font-semibold">ePAKSI</span>
+            <UBadge color="green">{{ epaksi.length }}</UBadge>
+          </div>
+        </template>
 
-        <table class="w-full text-sm">
-          <thead class="bg-gray-100">
-            <tr>
-              <th class="p-2 text-left">Nama DI</th>
-              <th class="p-2">Luas</th>
-              <th class="p-2">Pengelola</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            <tr v-for="e in epaksiPaginated" :key="e.nama">
-              <td class="p-2">{{ e.nama }}</td>
-              <td class="p-2 text-center">{{ e.luas }}</td>
-              <td class="p-2 text-center">{{ e.pengelola }}</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div class="flex justify-between mt-3">
-          <button @click="epaksiPage--" :disabled="epaksiPage===1">Prev</button>
-          <button @click="epaksiPage++">Next</button>
-        </div>
-      </div>
-
+        <UTable
+          :data="epaksi.slice(0, 10)"
+          :columns="[
+            { accessorKey: 'nama', header: 'Nama DI' },
+            { accessorKey: 'luas', header: 'Luas' },
+            { accessorKey: 'pengelola', header: 'Pengelola' }
+          ]"
+        />
+      </UCard>
     </div>
 
-    <!-- legend -->
-    <div class="mt-6 flex gap-4 text-sm">
-      <span class="bg-green-100 px-2 py-1 rounded">Sama</span>
-      <span class="bg-yellow-100 px-2 py-1 rounded">Berbeda</span>
-      <span class="bg-red-100 px-2 py-1 rounded">Tidak ada di ePAKSI</span>
+    <!-- PAGINATION -->
+    <div class="mt-6 flex justify-center">
+      <UPagination
+        v-model="page"
+        :total="wrdc.length"
+        :page-count="perPage"
+      />
     </div>
-  </div>
+
+    <!-- MODAL -->
+    <UModal v-model="isOpen">
+      <UCard>
+        <template #header>
+          <div class="font-semibold text-lg">Detail Perbandingan</div>
+        </template>
+
+        <div v-if="selected" class="grid grid-cols-2 gap-6 text-sm">
+          <!-- WRDC -->
+          <div class="space-y-2">
+            <h3 class="font-semibold text-blue-600">WRDC</h3>
+            <p><b>Nama:</b> {{ selected.wrdc.nama }}</p>
+            <p><b>Luas:</b> {{ selected.wrdc.luas }}</p>
+            <p><b>Pengelola:</b> {{ selected.wrdc.pengelola }}</p>
+          </div>
+
+          <!-- EPAKSI -->
+          <div class="space-y-2">
+            <h3 class="font-semibold text-green-600">ePAKSI</h3>
+
+            <div v-if="selected.epaksi">
+              <p><b>Nama:</b> {{ selected.epaksi.nama }}</p>
+              <p><b>Luas:</b> {{ selected.epaksi.luas }}</p>
+              <p><b>Pengelola:</b> {{ selected.epaksi.pengelola }}</p>
+            </div>
+
+            <div v-else class="text-red-500 font-medium">
+              ❌ Tidak ditemukan di ePAKSI
+            </div>
+          </div>
+        </div>
+      </UCard>
+    </UModal>
+  </UContainer>
 </template>
