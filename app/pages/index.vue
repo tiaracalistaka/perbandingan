@@ -5,24 +5,52 @@ type DataDI = {
   pengelola: string
 }
 
-const { data, pending } = await useFetch<{
-  wrdc: DataDI[]
-  epaksi: DataDI[]
-}>('/api/compare')
+type ApiResponse = {
+  wrdc: {
+    data: DataDI[]
+    pagination: {
+      page: number
+      limit: number
+      total: number
+      totalPages: number
+    }
+  }
+  epaksi: {
+    data: DataDI[]
+    pagination: {
+      page: number
+      limit: number
+      total: number
+      totalPages: number
+    }
+  }
+}
 
-const page = ref(1)
-const perPage = 10
+const route = useRoute()
+const router = useRouter()
 
-const wrdc = computed<DataDI[]>(() => data.value?.wrdc || [])
-const epaksi = computed<DataDI[]>(() => data.value?.epaksi || [])
+const wrdcPage = ref(parseInt(route.query.wrdcPage as string) || 1)
+const wrdcLimit = ref(10)
+const epaksiPage = ref(parseInt(route.query.epaksiPage as string) || 1)
+const epaksiLimit = ref(10)
 
-const paginated = computed(() => {
-  const start = (page.value - 1) * perPage
-  return wrdc.value.slice(start, start + perPage)
+const { data, pending, refresh } = await useFetch<ApiResponse>('/api/compare', {
+  query: {
+    wrdcPage: wrdcPage,
+    wrdcLimit: wrdcLimit,
+    epaksiPage: epaksiPage,
+    epaksiLimit: epaksiLimit
+  }
 })
 
+const wrdcData = computed<DataDI[]>(() => data.value?.wrdc?.data || [])
+const wrdcPagination = computed(() => data.value?.wrdc?.pagination)
+
+const epaksiData = computed<DataDI[]>(() => data.value?.epaksi?.data || [])
+const epaksiPagination = computed(() => data.value?.epaksi?.pagination)
+
 function findMatch(nama: string) {
-  return epaksi.value.find(e => e.nama === nama)
+  return epaksiData.value.find(e => e.nama === nama)
 }
 
 function getStatus(w: DataDI) {
@@ -36,6 +64,29 @@ function getStatus(w: DataDI) {
   ) return 'green'
 
   return 'yellow'
+}
+
+// Update pagination
+async function updateWrdcPage(page: number) {
+  wrdcPage.value = page
+  await router.push({
+    query: {
+      ...route.query,
+      wrdcPage: page
+    }
+  })
+  await refresh()
+}
+
+async function updateEpaksiPage(page: number) {
+  epaksiPage.value = page
+  await router.push({
+    query: {
+      ...route.query,
+      epaksiPage: page
+    }
+  })
+  await refresh()
 }
 
 // modal
@@ -79,11 +130,11 @@ const columns = [
         <template #header>
           <div class="flex justify-between items-center">
             <span class="font-semibold">WRDC</span>
-            <UBadge color="primary">{{ wrdc.length }}</UBadge>
+            <UBadge color="primary">{{ wrdcPagination?.total || 0 }}</UBadge>
           </div>
         </template>
 
-        <UTable :data="paginated" :columns="columns">
+        <UTable :data="wrdcData" :columns="columns">
           <!-- warna status -->
           <template #nama-cell="{ row }">
             <div
@@ -105,6 +156,18 @@ const columns = [
             </UButton>
           </template>
         </UTable>
+
+        <!-- Pagination WRDC -->
+        <template #footer v-if="wrdcPagination">
+          <div class="flex justify-center mt-4">
+            <UPagination
+              :model-value="wrdcPage"
+              :page-count="wrdcLimit"
+              :total="wrdcPagination.total"
+              @update:model-value="updateWrdcPage"
+            />
+          </div>
+        </template>
       </UCard>
 
       <!-- EPAKSI -->
@@ -112,29 +175,34 @@ const columns = [
         <template #header>
           <div class="flex justify-between items-center">
             <span class="font-semibold">ePAKSI</span>
-            <UBadge color="info">{{ epaksi.length }}</UBadge>
+            <UBadge color="info">{{ epaksiPagination?.total || 0 }}</UBadge>
           </div>
         </template>
 
         <UTable
-          :data="epaksi.slice(0, 10)"
+          :data="epaksiData"
           :columns="[
             { accessorKey: 'nama', header: 'Nama DI' },
             { accessorKey: 'luas', header: 'Luas' },
             { accessorKey: 'pengelola', header: 'Pengelola' }
           ]"
         />
+
+        <!-- Pagination ePAKSI -->
+        <template #footer v-if="epaksiPagination">
+          <div class="flex justify-center mt-4">
+            <UPagination
+              :model-value="epaksiPage"
+              :page-count="epaksiLimit"
+              :total="epaksiPagination.total"
+              @update:model-value="updateEpaksiPage"
+            />
+          </div>
+        </template>
       </UCard>
     </div>
 
-    <!-- PAGINATION -->
-    <div class="mt-6 flex justify-center">
-      <UPagination
-        v-model="page"
-        :total="wrdc.length"
-        :page-count="perPage"
-      />
-    </div>
+    <!-- Removed old pagination -->
 
     <!-- MODAL -->
     <UModal v-model="isOpen">
